@@ -1,33 +1,58 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect, useCallback } from "react";
 import Input from "../../components/Input/Input";
 import Todo from "./Todo";
+import { fetchTodos, createTodo, deleteTodo } from "../../services/todoApi";
+import type { TodoItem } from "../../mocks/handlers";
 import styles from "./Todoapp.module.css";
 
-interface TodoItem {
-  id: number;
-  text: string;
-}
-
-let nextId = 1;
-
 const TodoApp: React.FC = () => {
-  const [todos, setTodos] = useState<TodoItem[]>([
-    { id: nextId++, text: "Entered Todo 1" },
-    { id: nextId++, text: "Entered Todo 2" },
-    { id: nextId++, text: "Entered Todo 3" },
-  ]);
+  const [todos, setTodos] = useState<TodoItem[]>([]);
   const [inputValue, setInputValue] = useState("");
   const [searchValue, setSearchValue] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = () => {
+  // GET — load todos on mount
+  const loadTodos = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await fetchTodos();
+      setTodos(data);
+    } catch {
+      setError("Failed to load todos.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadTodos();
+  }, [loadTodos]);
+
+  // POST — add a new todo
+  const handleSubmit = async () => {
     const trimmed = inputValue.trim();
     if (!trimmed) return;
-    setTodos((prev) => [...prev, { id: nextId++, text: trimmed }]);
-    setInputValue("");
+    try {
+      setError(null);
+      const newTodo = await createTodo(trimmed);
+      setTodos((prev) => [...prev, newTodo]);
+      setInputValue("");
+    } catch {
+      setError("Failed to add todo.");
+    }
   };
 
-  const handleDelete = (id: number) => {
-    setTodos((prev) => prev.filter((todo) => todo.id !== id));
+  // DELETE — remove a todo
+  const handleDelete = async (id: number) => {
+    try {
+      setError(null);
+      await deleteTodo(id);
+      setTodos((prev) => prev.filter((t) => t.id !== id));
+    } catch {
+      setError("Failed to delete todo.");
+    }
   };
 
   const filteredTodos = useMemo(() => {
@@ -73,10 +98,13 @@ const TodoApp: React.FC = () => {
           </button>
         </div>
 
+        {/* Error */}
+        {error && <p className={styles.errorMsg}>{error}</p>}
+
         <div className={styles.divider} />
 
         {/* Count */}
-        {todos.length > 0 && (
+        {!loading && todos.length > 0 && (
           <span className={styles.count}>
             {filteredTodos.length} of {todos.length} tasks
           </span>
@@ -84,21 +112,23 @@ const TodoApp: React.FC = () => {
 
         {/* Todo list */}
         <div className={styles.todoList}>
-          {filteredTodos.length === 0 && (
+          {loading && <p className={styles.empty}>Loading...</p>}
+          {!loading && filteredTodos.length === 0 && (
             <p className={styles.empty}>
               {searchValue
                 ? "No matching todos."
                 : "Nothing here yet — add a task above!"}
             </p>
           )}
-          {filteredTodos.map((todo) => (
-            <Todo
-              key={todo.id}
-              id={todo.id}
-              text={todo.text}
-              onDelete={handleDelete}
-            />
-          ))}
+          {!loading &&
+            filteredTodos.map((todo) => (
+              <Todo
+                key={todo.id}
+                id={todo.id}
+                text={todo.text}
+                onDelete={handleDelete}
+              />
+            ))}
         </div>
       </div>
     </div>
